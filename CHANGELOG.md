@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+&nbsp;
+
+#### Linux aarch64 distribution
+
+Quarkdown now ships a per-platform distribution for Linux on ARM64 (`linux-aarch64`), in addition to the existing `linux-x64`, `macos-x64`, `macos-aarch64`, and `windows-x64` targets.
+
 ### Fixed
 
 &nbsp;

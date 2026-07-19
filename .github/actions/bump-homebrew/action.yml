@@ -30,12 +30,14 @@ runs:
     - name: Download per-platform zips and compute SHAs
       run: |
         BASE_URL="https://github.com/iamgio/quarkdown/releases/download/v$VERSION"
-        curl -fL -o macos-x64.zip     "$BASE_URL/quarkdown-macos-x64.zip"
-        curl -fL -o macos-aarch64.zip "$BASE_URL/quarkdown-macos-aarch64.zip"
-        curl -fL -o linux-x64.zip     "$BASE_URL/quarkdown-linux-x64.zip"
+        curl -fL -o macos-x64.zip       "$BASE_URL/quarkdown-macos-x64.zip"
+        curl -fL -o macos-aarch64.zip   "$BASE_URL/quarkdown-macos-aarch64.zip"
+        curl -fL -o linux-x64.zip       "$BASE_URL/quarkdown-linux-x64.zip"
+        curl -fL -o linux-aarch64.zip   "$BASE_URL/quarkdown-linux-aarch64.zip"
         echo "SHA_MACOS_X64=$(shasum -a 256 macos-x64.zip         | cut -d ' ' -f 1)" >> $GITHUB_ENV
         echo "SHA_MACOS_AARCH64=$(shasum -a 256 macos-aarch64.zip | cut -d ' ' -f 1)" >> $GITHUB_ENV
         echo "SHA_LINUX_X64=$(shasum -a 256 linux-x64.zip         | cut -d ' ' -f 1)" >> $GITHUB_ENV
+        echo "SHA_LINUX_AARCH64=$(shasum -a 256 linux-aarch64.zip  | cut -d ' ' -f 1)" >> $GITHUB_ENV
       shell: bash
 
     - name: Update formula
@@ -47,6 +49,7 @@ runs:
           sha_macos_x64 = ENV.fetch("SHA_MACOS_X64")
           sha_macos_aarch64 = ENV.fetch("SHA_MACOS_AARCH64")
           sha_linux_x64 = ENV.fetch("SHA_LINUX_X64")
+          sha_linux_aarch64 = ENV.fetch("SHA_LINUX_AARCH64")
           base_url = "https://github.com/iamgio/quarkdown/releases/download/v#{version}"
 
           content.sub!(/^(\s*)version "[^"]+"/, "\\1version \"#{version}\"")
@@ -60,9 +63,25 @@ runs:
             /(on_intel do\n\s*url ")[^"]+("\n\s*sha256 ")[0-9a-f]{64}/m,
             "\\1#{base_url}/quarkdown-macos-x64.zip\\2#{sha_macos_x64}"
           )
+
+          # Replace the entire on_linux block (flat or already nested) with nested on_arm/on_intel sub-blocks.
+          linux_block = <<~BLOCK.chomp
+            on_linux do
+              on_arm do
+                url "#{base_url}/quarkdown-linux-aarch64.zip"
+                sha256 "#{sha_linux_aarch64}"
+              end
+
+              on_intel do
+                url "#{base_url}/quarkdown-linux-x64.zip"
+                sha256 "#{sha_linux_x64}"
+              end
+            end
+          BLOCK
+          # Match flat on_linux (first run) or nested on_linux (subsequent runs).
           content.sub!(
-            /(on_linux do\n\s*url ")[^"]+("\n\s*sha256 ")[0-9a-f]{64}/m,
-            "\\1#{base_url}/quarkdown-linux-x64.zip\\2#{sha_linux_x64}"
+            /on_linux do\n(?:\s+(?:on_\w+ do\n\s*url "[^"]+"\n\s*sha256 "[0-9a-f]{64}\n\s*end\n|url "[^"]+"\n\s*sha256 "[0-9a-f]{64}\n))+end/m,
+            linux_block
           )
 
           File.write(path, content)
@@ -79,6 +98,7 @@ runs:
             /quarkdown-macos-x64\.zip"\s*\n\s*sha256 "#{Regexp.escape(ENV.fetch("SHA_MACOS_X64"))}"/,
             /quarkdown-macos-aarch64\.zip"\s*\n\s*sha256 "#{Regexp.escape(ENV.fetch("SHA_MACOS_AARCH64"))}"/,
             /quarkdown-linux-x64\.zip"\s*\n\s*sha256 "#{Regexp.escape(ENV.fetch("SHA_LINUX_X64"))}"/,
+            /quarkdown-linux-aarch64\.zip"\s*\n\s*sha256 "#{Regexp.escape(ENV.fetch("SHA_LINUX_AARCH64"))}"/,
           ]
           missing = required.reject { |re| content.match?(re) }
           unless missing.empty?
